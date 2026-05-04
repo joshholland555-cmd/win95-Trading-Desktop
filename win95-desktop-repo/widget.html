@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TradingView Widget</title>
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; background: #131722; color: #d1d4dc; font: 12px sans-serif; }
+    #host { position: absolute; inset: 0; }
+    .tradingview-widget-container, .tradingview-widget-container__widget { width: 100%; height: 100%; }
+    .err { padding: 20px; }
+    a { color: #2962ff; }
+    #fallback {
+      position: absolute; inset: 0; display: none;
+      align-items: center; justify-content: center; flex-direction: column;
+      gap: 12px; padding: 20px; text-align: center;
+      background: #131722; color: #d1d4dc;
+    }
+    #fallback.show { display: flex; }
+    #fallback h3 { margin: 0; font-size: 14px; }
+    #fallback p { margin: 0; max-width: 360px; line-height: 1.4; opacity: 0.8; }
+    #fallback a {
+      display: inline-block; padding: 8px 16px; background: #2962ff;
+      color: #fff; text-decoration: none; border-radius: 4px; font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div id="host"></div>
+  <div id="fallback">
+    <h3>Widget didn't load</h3>
+    <p>Your browser may be blocking third-party content from TradingView. Try opening in a new tab.</p>
+    <a id="fallback-link" href="#" target="_top" rel="noopener">Open on TradingView ↗</a>
+  </div>
+  <script>
+  (function(){
+    // Try to request storage access for browsers that block 3rd-party storage by default.
+    // This is what makes TradingView's nested chart iframe work in Safari, Brave, Firefox-strict, etc.
+    try {
+      if (document.requestStorageAccess) {
+        document.requestStorageAccess().catch(function(){ /* user-gesture required; ignore */ });
+      }
+    } catch (e) { /* noop */ }
+    // Catalog of supported TradingView widgets.
+    // slug = filename used in https://s3.tradingview.com/external-embedding/embed-widget-{slug}.js
+    var CATALOG = {
+      'advanced-chart': {
+        name: 'Advanced Chart',
+        config: {
+          autosize: true, symbol: 'BITSTAMP:BTCUSD', interval: 'D', timezone: 'Etc/UTC',
+          theme: 'dark', style: '1', locale: 'en', allow_symbol_change: true,
+          calendar: false, support_host: 'https://www.tradingview.com'
+        }
+      },
+      'mini-symbol-overview': {
+        name: 'Mini Chart',
+        config: {
+          symbol: 'BITSTAMP:BTCUSD', width: '100%', height: '100%', locale: 'en',
+          dateRange: '12M', colorTheme: 'dark', isTransparent: false, autosize: true,
+          largeChartUrl: ''
+        }
+      },
+      'symbol-overview': {
+        name: 'Symbol Overview',
+        config: {
+          symbols: [["Bitcoin","BITSTAMP:BTCUSD|1D"],["Ethereum","BITSTAMP:ETHUSD|1D"],["Solana","BINANCE:SOLUSDT|1D"]],
+          chartOnly: false, width: '100%', height: '100%', locale: 'en',
+          colorTheme: 'dark', autosize: true, showVolume: false, showMA: false,
+          hideDateRanges: false, hideMarketStatus: false, hideSymbolLogo: false,
+          scalePosition: 'right', scaleMode: 'Normal',
+          fontFamily: '-apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif',
+          fontSize: '10', noTimeScale: false, valuesTracking: '1',
+          changeMode: 'price-and-percent', chartType: 'area',
+          lineWidth: 2, lineType: 0, dateRanges: ['1d|1','1m|30','3m|60','12m|1D','60m|1W','all|1M']
+        }
+      },
+      'symbol-info': {
+        name: 'Symbol Info',
+        compact: true,
+        config: { symbol: 'BITSTAMP:BTCUSD', width: '100%', locale: 'en', colorTheme: 'dark', isTransparent: false }
+      },
+      'technical-analysis': {
+        name: 'Technical Analysis',
+        config: {
+          interval: '1m', width: '100%', height: '100%', isTransparent: false,
+          symbol: 'BITSTAMP:BTCUSD', showIntervalTabs: true, displayMode: 'single',
+          locale: 'en', colorTheme: 'dark'
+        }
+      },
+      'financials': {
+        name: 'Fundamental Data',
+        config: {
+          colorTheme: 'dark', isTransparent: false, largeChartUrl: '', displayMode: 'regular',
+          width: '100%', height: '100%', symbol: 'NASDAQ:AAPL', locale: 'en'
+        }
+      },
+      'symbol-profile': {
+        name: 'Company Profile',
+        config: { width: '100%', height: '100%', colorTheme: 'dark', isTransparent: false, symbol: 'NASDAQ:AAPL', locale: 'en' }
+      },
+      'single-quote': {
+        name: 'Single Ticker',
+        compact: true,
+        config: { symbol: 'BITSTAMP:BTCUSD', width: '100%', isTransparent: false, colorTheme: 'dark', locale: 'en' }
+      },
+      'ticker': {
+        name: 'Ticker',
+        script: 'tickers',
+        compact: true,
+        config: {
+          symbols: [
+            { proName: 'FOREXCOM:SPXUSD', title: 'S&P 500' },
+            { proName: 'FOREXCOM:NSXUSD', title: 'Nasdaq 100' },
+            { proName: 'FX_IDC:EURUSD', title: 'EUR/USD' },
+            { proName: 'BITSTAMP:BTCUSD', title: 'BTC/USD' },
+            { proName: 'BITSTAMP:ETHUSD', title: 'ETH/USD' }
+          ],
+          isTransparent: false, showSymbolLogo: true, colorTheme: 'dark', locale: 'en'
+        }
+      },
+      'ticker-tape': {
+        name: 'Ticker Tape',
+        compact: true,
+        config: {
+          symbols: [
+            { proName: 'FOREXCOM:SPXUSD', title: 'S&P 500' },
+            { proName: 'FOREXCOM:NSXUSD', title: 'Nasdaq 100' },
+            { proName: 'FX_IDC:EURUSD', title: 'EUR/USD' },
+            { proName: 'BITSTAMP:BTCUSD', title: 'BTC/USD' },
+            { proName: 'BITSTAMP:ETHUSD', title: 'ETH/USD' }
+          ],
+          showSymbolLogo: true, isTransparent: false, displayMode: 'adaptive',
+          colorTheme: 'dark', locale: 'en'
+        }
+      },
+      'market-overview': {
+        name: 'Market Overview',
+        config: {
+          colorTheme: 'dark', dateRange: '12M', showChart: true, locale: 'en',
+          width: '100%', height: '100%', largeChartUrl: '', isTransparent: false,
+          showSymbolLogo: true, showFloatingTooltip: false,
+          tabs: [
+            { title: 'Indices', symbols: [
+              { s: 'FOREXCOM:SPXUSD', d: 'S&P 500' },
+              { s: 'FOREXCOM:NSXUSD', d: 'US 100' },
+              { s: 'FOREXCOM:DJI', d: 'Dow 30' },
+              { s: 'INDEX:NKY', d: 'Nikkei 225' },
+              { s: 'INDEX:DEU40', d: 'DAX' },
+              { s: 'FOREXCOM:UKXGBP', d: 'UK 100' }
+            ], originalTitle: 'Indices' },
+            { title: 'Futures', symbols: [
+              { s: 'CME_MINI:ES1!', d: 'S&P 500' },
+              { s: 'CME:6E1!', d: 'Euro' },
+              { s: 'COMEX:GC1!', d: 'Gold' },
+              { s: 'NYMEX:CL1!', d: 'Oil' }
+            ], originalTitle: 'Futures' },
+            { title: 'Bonds', symbols: [
+              { s: 'CBOT:ZB1!', d: 'T-Bond' },
+              { s: 'CBOT:UB1!', d: 'Ultra T-Bond' },
+              { s: 'EUREX:FGBL1!', d: 'Euro Bund' }
+            ], originalTitle: 'Bonds' },
+            { title: 'Forex', symbols: [
+              { s: 'FX:EURUSD', d: 'EUR/USD' },
+              { s: 'FX:GBPUSD', d: 'GBP/USD' },
+              { s: 'FX:USDJPY', d: 'USD/JPY' },
+              { s: 'FX:AUDUSD', d: 'AUD/USD' }
+            ], originalTitle: 'Forex' }
+          ]
+        }
+      },
+      'market-quotes': {
+        name: 'Stock Market',
+        config: {
+          colorTheme: 'dark', dateRange: '12M', exchange: 'US', showChart: true,
+          locale: 'en', width: '100%', height: '100%', largeChartUrl: '',
+          isTransparent: false, showSymbolLogo: true, showFloatingTooltip: false,
+          plotLineColorGrowing: 'rgba(41, 98, 255, 1)', plotLineColorFalling: 'rgba(41, 98, 255, 1)',
+          gridLineColor: 'rgba(42, 46, 57, 0)', scaleFontColor: 'rgba(209, 212, 220, 1)',
+          belowLineFillColorGrowing: 'rgba(41, 98, 255, 0.12)',
+          belowLineFillColorFalling: 'rgba(41, 98, 255, 0.12)',
+          belowLineFillColorGrowingBottom: 'rgba(41, 98, 255, 0)',
+          belowLineFillColorFallingBottom: 'rgba(41, 98, 255, 0)',
+          symbolActiveColor: 'rgba(41, 98, 255, 0.12)'
+        }
+      },
+      'market-data': {
+        name: 'Market Data',
+        script: 'market-quotes',
+        config: {
+          width: '100%', height: '100%', symbolsGroups: [
+            { name: 'Indices', originalName: 'Indices', symbols: [
+              { name: 'FOREXCOM:SPXUSD', displayName: 'S&P 500' },
+              { name: 'FOREXCOM:NSXUSD', displayName: 'US 100' },
+              { name: 'FOREXCOM:DJI', displayName: 'Dow 30' }
+            ]},
+            { name: 'Futures', originalName: 'Futures', symbols: [
+              { name: 'CME_MINI:ES1!', displayName: 'S&P 500' },
+              { name: 'CME:6E1!', displayName: 'Euro' },
+              { name: 'COMEX:GC1!', displayName: 'Gold' }
+            ]},
+            { name: 'Bonds', originalName: 'Bonds', symbols: [
+              { name: 'CBOT:ZB1!', displayName: 'T-Bond' },
+              { name: 'CBOT:UB1!', displayName: 'Ultra T-Bond' }
+            ]},
+            { name: 'Forex', originalName: 'Forex', symbols: [
+              { name: 'FX:EURUSD', displayName: 'EUR/USD' },
+              { name: 'FX:GBPUSD', displayName: 'GBP/USD' },
+              { name: 'FX:USDJPY', displayName: 'USD/JPY' }
+            ]}
+          ],
+          showSymbolLogo: true, isTransparent: false, colorTheme: 'dark', locale: 'en'
+        }
+      },
+      'stock-heatmap': {
+        name: 'Stock Heatmap',
+        config: {
+          exchanges: [], dataSource: 'SPX500', grouping: 'sector', blockSize: 'market_cap_basic',
+          blockColor: 'change', locale: 'en', symbolUrl: '', colorTheme: 'dark',
+          hasTopBar: false, isDataSetEnabled: false, isZoomEnabled: true,
+          hasSymbolTooltip: true, isMonoSize: false, width: '100%', height: '100%'
+        }
+      },
+      'crypto-coins-heatmap': {
+        name: 'Crypto Heatmap',
+        config: {
+          dataSource: 'Crypto', blockSize: 'market_cap_calc', blockColor: '24h_close_change|5',
+          locale: 'en', symbolUrl: '', colorTheme: 'dark', hasTopBar: false,
+          isDataSetEnabled: false, isZoomEnabled: true, hasSymbolTooltip: true,
+          isMonoSize: false, width: '100%', height: '100%'
+        }
+      },
+      'etf-heatmap': {
+        name: 'ETF Heatmap',
+        config: {
+          dataSource: 'AllUSEtf', blockSize: 'aum', blockColor: 'change',
+          grouping: 'asset_class', locale: 'en', symbolUrl: '', colorTheme: 'dark',
+          hasTopBar: false, isDataSetEnabled: false, isZoomEnabled: true,
+          hasSymbolTooltip: true, isMonoSize: false, width: '100%', height: '100%'
+        }
+      },
+      'forex-cross-rates': {
+        name: 'Forex Cross Rates',
+        config: {
+          width: '100%', height: '100%',
+          currencies: ['EUR','USD','JPY','GBP','CHF','AUD','CAD','NZD'],
+          isTransparent: false, colorTheme: 'dark', locale: 'en'
+        }
+      },
+      'forex-heat-map': {
+        name: 'Forex Heatmap',
+        config: {
+          width: '100%', height: '100%', currencies: ['EUR','USD','JPY','GBP','CHF','AUD','CAD','NZD'],
+          isTransparent: false, colorTheme: 'dark', locale: 'en'
+        }
+      },
+      'screener': {
+        name: 'Screener',
+        config: {
+          width: '100%', height: '100%', defaultColumn: 'overview',
+          defaultScreen: 'general', market: 'us', showToolbar: true,
+          colorTheme: 'dark', locale: 'en', isTransparent: false
+        }
+      },
+      'crypto-mkt-screener': {
+        name: 'Crypto Market',
+        script: 'screener',
+        config: {
+          width: '100%', height: '100%', defaultColumn: 'overview',
+          defaultScreen: 'top_gainers', market: 'crypto', showToolbar: true,
+          colorTheme: 'dark', locale: 'en', isTransparent: false
+        }
+      },
+      'timeline': {
+        name: 'Top Stories',
+        config: {
+          feedMode: 'all_symbols', isTransparent: false, displayMode: 'regular',
+          width: '100%', height: '100%', colorTheme: 'dark', locale: 'en'
+        }
+      },
+      'events': {
+        name: 'Economic Calendar',
+        config: {
+          colorTheme: 'dark', isTransparent: false, width: '100%', height: '100%',
+          locale: 'en', importanceFilter: '-1,0,1', countryFilter: 'us,eu,jp,gb'
+        }
+      }
+    };
+
+    function getParam(name) {
+      var m = new RegExp('[?&]' + name + '=([^&]*)').exec(location.search);
+      return m ? decodeURIComponent(m[1]) : null;
+    }
+
+    var slug = getParam('w');
+    var host = document.getElementById('host');
+
+    // Built-in non-TradingView widgets (notepad, etc.) handled inline.
+    if (slug === 'notepad') {
+      renderNotepad(host, getParam('symbol') || 'default');
+      return;
+    }
+
+    if (!slug || !CATALOG[slug]) {
+      host.innerHTML = '<div class="err">Unknown widget: ' + (slug ? slug : '(none)') + '</div>';
+      return;
+    }
+    var entry = CATALOG[slug];
+    document.title = entry.name + ' - TradingView';
+    if (entry.compact) document.body.classList.add('compact');
+
+    // Optional symbol override
+    var symbolOverride = getParam('symbol');
+    if (symbolOverride && entry.config && 'symbol' in entry.config) {
+      entry.config.symbol = symbolOverride;
+    }
+
+    var container = document.createElement('div');
+    container.className = 'tradingview-widget-container';
+    var inner = document.createElement('div');
+    inner.className = 'tradingview-widget-container__widget';
+    container.appendChild(inner);
+    host.appendChild(container);
+
+    var script = document.createElement('script');
+    script.type = 'text/javascript';
+    script.async = true;
+    var scriptName = entry.script || slug;
+    script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-' + scriptName + '.js';
+    script.text = JSON.stringify(entry.config);
+    container.appendChild(script);
+
+    // Fallback link — if the widget hasn't injected anything after 8s, show a message + open-on-TV link.
+    // (Some browsers block third-party iframes/storage and the embed never paints.)
+    var fb = document.getElementById('fallback');
+    var fbLink = document.getElementById('fallback-link');
+    var sym = entry.config && entry.config.symbol ? entry.config.symbol : '';
+    var tvUrl = sym ? ('https://www.tradingview.com/symbols/' + encodeURIComponent(sym.replace(':', '-')) + '/') : 'https://www.tradingview.com/';
+    if (fbLink) fbLink.href = tvUrl;
+    setTimeout(function(){
+      // If the script never inserted an iframe AND the container is still empty, show fallback.
+      var iframe = document.querySelector('#host iframe');
+      var inner = document.querySelector('.tradingview-widget-container__widget');
+      var hasContent = iframe || (inner && inner.children.length > 0);
+      if (!hasContent && fb) fb.classList.add('show');
+    }, 8000);
+
+    // ---- Notepad widget ----
+    function renderNotepad(host, id) {
+      document.title = 'Notepad';
+      var KEY = 'win95-notepad:' + id;
+      var META_KEY = 'win95-notepad-meta:' + id;
+      host.innerHTML = ''
+        + '<style>'
+        + '#np-root{position:absolute;inset:0;display:flex;flex-direction:column;background:#fff;color:#000;font:13px "MS Sans Serif",sans-serif}'
+        + '#np-bar{display:flex;align-items:center;gap:6px;padding:4px 6px;background:#c0c0c0;border-bottom:1px solid #808080;flex-shrink:0;flex-wrap:wrap}'
+        + '#np-bar button{font:11px sans-serif;padding:2px 8px;background:#c0c0c0;border-top:2px solid #fff;border-left:2px solid #fff;border-right:2px solid #808080;border-bottom:2px solid #808080;cursor:pointer;color:#000}'
+        + '#np-bar button:active{border-top:2px solid #808080;border-left:2px solid #808080;border-right:2px solid #fff;border-bottom:2px solid #fff}'
+        + '#np-bar select,#np-bar input[type=number]{font:11px sans-serif;padding:1px 3px}'
+        + '#np-bar .sep{width:1px;align-self:stretch;background:#808080;margin:2px 4px}'
+        + '#np-bar .spacer{flex:1}'
+        + '#np-bar .status{font-size:11px;color:#444}'
+        + '#np-text{flex:1;width:100%;border:none;outline:none;padding:8px 10px;resize:none;font:14px Consolas,Menlo,monospace;background:#fff;color:#000;box-sizing:border-box}'
+        + '#np-foot{display:flex;justify-content:space-between;padding:2px 8px;background:#c0c0c0;border-top:1px solid #808080;font-size:11px;color:#333;flex-shrink:0}'
+        + '</style>'
+        + '<div id="np-root">'
+        + '  <div id="np-bar">'
+        + '    <button id="np-save" title="Save (Ctrl+S)">Save</button>'
+        + '    <button id="np-clear" title="Clear all text">Clear</button>'
+        + '    <button id="np-export" title="Download as .txt">Export</button>'
+        + '    <span class="sep"></span>'
+        + '    <label style="display:flex;gap:4px;align-items:center;">Font'
+        + '      <select id="np-font">'
+        + '        <option value="Consolas,Menlo,monospace">Mono</option>'
+        + '        <option value="Georgia,serif">Serif</option>'
+        + '        <option value="Segoe UI,Arial,sans-serif">Sans</option>'
+        + '        <option value="Comic Sans MS,cursive">Comic</option>'
+        + '      </select>'
+        + '    </label>'
+        + '    <label style="display:flex;gap:4px;align-items:center;">Size'
+        + '      <input id="np-size" type="number" min="10" max="32" step="1" value="14" style="width:48px">'
+        + '    </label>'
+        + '    <label style="display:flex;gap:4px;align-items:center;"><input id="np-wrap" type="checkbox" checked> Wrap</label>'
+        + '    <span class="spacer"></span>'
+        + '    <span class="status" id="np-status">Ready</span>'
+        + '  </div>'
+        + '  <textarea id="np-text" spellcheck="true" placeholder="Type something… auto-saves to your browser."></textarea>'
+        + '  <div id="np-foot">'
+        + '    <span id="np-counts">0 chars · 0 words</span>'
+        + '    <span id="np-id">id: ' + id + '</span>'
+        + '  </div>'
+        + '</div>';
+
+      var ta = document.getElementById('np-text');
+      var status = document.getElementById('np-status');
+      var counts = document.getElementById('np-counts');
+      var saveBtn = document.getElementById('np-save');
+      var clearBtn = document.getElementById('np-clear');
+      var exportBtn = document.getElementById('np-export');
+      var fontSel = document.getElementById('np-font');
+      var sizeInp = document.getElementById('np-size');
+      var wrapInp = document.getElementById('np-wrap');
+
+      // Restore previous content + meta.
+      try { ta.value = localStorage.getItem(KEY) || ''; } catch (e) {}
+      var meta = {};
+      try { meta = JSON.parse(localStorage.getItem(META_KEY) || '{}'); } catch (e) {}
+      if (meta.font) fontSel.value = meta.font;
+      if (meta.size) sizeInp.value = meta.size;
+      if (typeof meta.wrap === 'boolean') wrapInp.checked = meta.wrap;
+      applyStyle();
+      updateCounts();
+
+      function applyStyle() {
+        ta.style.fontFamily = fontSel.value;
+        ta.style.fontSize = (parseInt(sizeInp.value, 10) || 14) + 'px';
+        ta.style.whiteSpace = wrapInp.checked ? 'pre-wrap' : 'pre';
+        ta.style.overflowX = wrapInp.checked ? 'hidden' : 'auto';
+      }
+      function updateCounts() {
+        var t = ta.value;
+        var chars = t.length;
+        var words = t.trim() ? t.trim().split(/\s+/).length : 0;
+        counts.textContent = chars + ' chars · ' + words + ' words';
+      }
+      function saveMeta() {
+        try { localStorage.setItem(META_KEY, JSON.stringify({ font: fontSel.value, size: sizeInp.value, wrap: wrapInp.checked })); } catch (e) {}
+      }
+      function flashStatus(msg, ms) {
+        status.textContent = msg;
+        clearTimeout(flashStatus._t);
+        flashStatus._t = setTimeout(function(){ status.textContent = 'Ready'; }, ms || 1500);
+      }
+      var saveTimer = null;
+      function scheduleSave() {
+        status.textContent = 'Editing…';
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(function(){
+          try {
+            localStorage.setItem(KEY, ta.value);
+            flashStatus('Saved ✓');
+          } catch (e) { flashStatus('Save failed'); }
+        }, 400);
+      }
+      ta.addEventListener('input', function(){ updateCounts(); scheduleSave(); });
+      ta.addEventListener('keydown', function(e){
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+          e.preventDefault();
+          try { localStorage.setItem(KEY, ta.value); flashStatus('Saved ✓'); } catch (err) {}
+        }
+      });
+      saveBtn.addEventListener('click', function(){
+        try { localStorage.setItem(KEY, ta.value); flashStatus('Saved ✓'); } catch (e) {}
+      });
+      clearBtn.addEventListener('click', function(){
+        if (!ta.value || confirm('Clear all text?')) {
+          ta.value = '';
+          try { localStorage.setItem(KEY, ''); } catch (e) {}
+          updateCounts();
+          flashStatus('Cleared');
+        }
+      });
+      exportBtn.addEventListener('click', function(){
+        var blob = new Blob([ta.value], { type: 'text/plain' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'notepad-' + id + '.txt';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+      });
+      [fontSel, sizeInp, wrapInp].forEach(function(el){
+        el.addEventListener('change', function(){ applyStyle(); saveMeta(); });
+      });
+      sizeInp.addEventListener('input', function(){ applyStyle(); saveMeta(); });
+      ta.focus();
+    }
+  })();
+  </script>
+</body>
+</html>

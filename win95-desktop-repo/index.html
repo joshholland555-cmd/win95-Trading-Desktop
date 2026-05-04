@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Win95 Desktop</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="desktop" oncontextmenu="return false;"></div>
+  <div id="taskbar">
+    <div id="taskbar-items"></div>
+    <div id="taskbar-tray">
+      <button id="tray-fullscreen" class="tray-btn" title="Toggle fullscreen (F11)">⛶</button>
+      <button id="tray-show-desktop" class="tray-btn" title="Show Desktop (Ctrl+D)">▭</button>
+      <span id="tray-clock" title=""></span>
+    </div>
+  </div>
+  <input type="file" id="template-file" accept=".json,application/json" style="display:none" />
+  <input type="file" id="single-window-file" accept=".json,application/json" style="display:none" />
+
+  <!-- Toast/notification area -->
+  <div id="toast-host"></div>
+
+  <!-- Desktop context menu -->
+  <ul id="ctx-menu" class="ctx-menu" hidden>
+    <li data-action="new-window">
+      <span class="ctx-icon">📄</span>
+      <span class="ctx-label">New Window</span>
+    </li>
+    <li class="sep"></li>
+    <li data-action="save-template">
+      <span class="ctx-icon">💾</span>
+      <span class="ctx-label">Save Layout as Template...</span>
+    </li>
+    <li data-action="load-template">
+      <span class="ctx-icon">📂</span>
+      <span class="ctx-label">Load Template...</span>
+    </li>
+    <li class="sep"></li>
+    <li data-action="toggle-settings">
+      <span class="ctx-icon">⚙</span>
+      <span class="ctx-label">Display Properties...</span>
+    </li>
+    <li data-action="clear-windows">
+      <span class="ctx-icon">🗑</span>
+      <span class="ctx-label">Clear All Windows</span>
+    </li>
+    <li class="sep"></li>
+    <li data-action="refresh-all">
+      <span class="ctx-icon">🔄</span>
+      <span class="ctx-label">Refresh All Windows</span>
+    </li>
+    <li data-action="arrange-by" class="has-submenu">
+      <span class="ctx-icon">⇅</span>
+      <span class="ctx-label">Arrange Windows</span>
+      <span class="sub-arrow">▸</span>
+      <ul class="submenu">
+        <li data-action="cascade"><span class="ctx-icon">▤</span><span class="ctx-label">Cascade</span></li>
+        <li data-action="tile-h"><span class="ctx-icon">▬</span><span class="ctx-label">Tile Horizontal</span></li>
+        <li data-action="tile-v"><span class="ctx-icon">▮</span><span class="ctx-label">Tile Vertical</span></li>
+        <li class="sep"></li>
+        <li data-action="min-all"><span class="ctx-icon">_</span><span class="ctx-label">Minimize All</span></li>
+        <li data-action="restore-all"><span class="ctx-icon">▢</span><span class="ctx-label">Restore All</span></li>
+      </ul>
+    </li>
+    <li class="sep"></li>
+    <li data-action="shortcuts">
+      <span class="ctx-icon">⌨</span>
+      <span class="ctx-label">Keyboard Shortcuts (F1)</span>
+    </li>
+  </ul>
+
+  <!-- Text input context menu (copy/cut/paste/select all) -->
+  <ul id="text-ctx-menu" class="ctx-menu" hidden>
+    <li data-action="cut">
+      <span class="ctx-icon">✂</span>
+      <span class="ctx-label">Cut</span>
+    </li>
+    <li data-action="copy">
+      <span class="ctx-icon">⧉</span>
+      <span class="ctx-label">Copy</span>
+    </li>
+    <li data-action="paste">
+      <span class="ctx-icon">📋</span>
+      <span class="ctx-label">Paste</span>
+    </li>
+    <li class="sep"></li>
+    <li data-action="select-all">
+      <span class="ctx-icon">▤</span>
+      <span class="ctx-label">Select All</span>
+    </li>
+  </ul>
+
+  <!-- Window/icon context menu -->
+  <ul id="win-ctx-menu" class="ctx-menu" hidden>
+    <li data-action="new-widget">
+      <span class="ctx-icon">✨</span>
+      <span class="ctx-label">New Widget</span>
+    </li>
+    <li class="sep" data-only="icon"></li>
+    <li data-action="open-icon" data-only="icon">
+      <span class="ctx-icon">▶</span>
+      <span class="ctx-label">Open</span>
+    </li>
+    <li data-action="edit-icon" data-only="icon">
+      <span class="ctx-icon">✎</span>
+      <span class="ctx-label">Properties...</span>
+    </li>
+    <li data-action="delete-icon" data-only="icon">
+      <span class="ctx-icon">✖</span>
+      <span class="ctx-label">Delete</span>
+    </li>
+    <li class="sep"></li>
+    <li data-action="arrange-icons" class="has-submenu">
+      <span class="ctx-icon">⇅</span>
+      <span class="ctx-label">Arrange Icons</span>
+      <span class="sub-arrow">▸</span>
+      <ul class="submenu">
+        <li data-action="arrange-name"><span class="ctx-icon">A</span><span class="ctx-label">By Name</span></li>
+        <li data-action="arrange-type"><span class="ctx-icon">T</span><span class="ctx-label">By Type</span></li>
+        <li data-action="arrange-size"><span class="ctx-icon">#</span><span class="ctx-label">By Image Size</span></li>
+      </ul>
+    </li>
+    <li data-action="new-folder">
+      <span class="ctx-icon">📁</span>
+      <span class="ctx-label">New Folder Icon</span>
+    </li>
+    <li class="sep"></li>
+    <li data-action="refresh-icon" data-only="icon">
+      <span class="ctx-icon">🔄</span>
+      <span class="ctx-label">Refresh Window</span>
+    </li>
+  </ul>
+
+  <!-- Window header context menu (right-click on titlebar) -->
+  <ul id="win-header-ctx" class="ctx-menu" hidden>
+    <li data-action="win-restore"><span class="ctx-icon">▢</span><span class="ctx-label">Restore</span></li>
+    <li data-action="win-min"><span class="ctx-icon">_</span><span class="ctx-label">Minimize</span></li>
+    <li data-action="win-max"><span class="ctx-icon">▢</span><span class="ctx-label">Maximize</span></li>
+    <li class="sep"></li>
+    <li data-action="win-pin"><span class="ctx-icon">📌</span><span class="ctx-label">Always on Top</span></li>
+    <li data-action="win-front"><span class="ctx-icon">⤴</span><span class="ctx-label">Bring to Front</span></li>
+    <li data-action="win-back"><span class="ctx-icon">⤵</span><span class="ctx-label">Send to Back</span></li>
+    <li class="sep"></li>
+    <li data-action="win-reload"><span class="ctx-icon">↻</span><span class="ctx-label">Reload</span></li>
+    <li data-action="win-export"><span class="ctx-icon">⬇</span><span class="ctx-label">Export Window...</span></li>
+    <li class="sep"></li>
+    <li data-action="win-close"><span class="ctx-icon">✕</span><span class="ctx-label">Close (Ctrl+W)</span></li>
+  </ul>
+
+  <!-- Taskbar item context menu -->
+  <ul id="taskbar-ctx" class="ctx-menu" hidden>
+    <li data-action="tb-restore"><span class="ctx-icon">▢</span><span class="ctx-label">Restore</span></li>
+    <li data-action="tb-min"><span class="ctx-icon">_</span><span class="ctx-label">Minimize</span></li>
+    <li data-action="tb-max"><span class="ctx-icon">▢</span><span class="ctx-label">Maximize</span></li>
+    <li class="sep"></li>
+    <li data-action="tb-close"><span class="ctx-icon">✕</span><span class="ctx-label">Close</span></li>
+  </ul>
+
+  <!-- Keyboard shortcuts dialog -->
+  <div id="shortcuts-dialog" class="win95-window" hidden>
+    <div class="win95-titlebar">
+      <span class="win95-title">Keyboard Shortcuts</span>
+      <div class="win95-titlebar-buttons">
+        <button class="win95-tb-btn" data-act="close" title="Close">✕</button>
+      </div>
+    </div>
+    <div class="win95-body" style="padding:12px; font-size:12px;">
+      <table class="shortcuts-table">
+        <tr><th colspan="2">Window Management</th></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>W</kbd></td><td>Close active window</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>Tab</kbd></td><td>Cycle to next window</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>Cycle to previous window</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>Show/hide desktop (minimize all)</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd></td><td>Reopen last closed window</td></tr>
+        <tr><td><kbd>F11</kbd></td><td>Toggle fullscreen mode</td></tr>
+        <tr><td>Drag titlebar to edge</td><td>Snap left / right / maximize</td></tr>
+        <tr><td><kbd>Alt</kbd>+drag anywhere</td><td>Move window</td></tr>
+        <tr><td>Mouse wheel on corner</td><td>Resize window</td></tr>
+        <tr><td>Double-click titlebar</td><td>Maximize / restore</td></tr>
+        <tr><th colspan="2">View</th></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>=</kbd></td><td>Zoom in desktop</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>-</kbd></td><td>Zoom out desktop</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>0</kbd></td><td>Reset zoom</td></tr>
+        <tr><th colspan="2">Help</th></tr>
+        <tr><td><kbd>F1</kbd> or <kbd>?</kbd></td><td>Show this help</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>Close menus / dialogs</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- Compare-mode dialog -->
+  <div id="compare-dialog" class="win95-window" hidden>
+    <div class="win95-titlebar">
+      <span class="win95-title">Compare Tickers</span>
+      <div class="win95-titlebar-buttons">
+        <button class="win95-tb-btn" data-act="close" title="Close">✕</button>
+      </div>
+    </div>
+    <div class="win95-body" style="padding:10px; font-size:12px; display:flex; flex-direction:column; gap:8px;">
+      <div>Enter up to 8 tickers (one per line, e.g. <code>NASDAQ:AAPL</code>). A grid of mini-charts will open.</div>
+      <textarea id="compare-list" rows="8" placeholder="BITSTAMP:BTCUSD&#10;NASDAQ:AAPL&#10;NASDAQ:MSFT" style="width:100%; font-family:inherit;"></textarea>
+      <label style="display:flex; gap:6px; align-items:center;">Widget:
+        <select id="compare-widget">
+          <option value="mini-symbol-overview">Mini Chart</option>
+          <option value="advanced-chart">Advanced Chart</option>
+          <option value="single-quote">Single Quote</option>
+          <option value="symbol-info">Symbol Info</option>
+        </select>
+      </label>
+      <div style="display:flex; gap:6px; justify-content:flex-end;">
+        <button id="compare-cancel">Cancel</button>
+        <button id="compare-go"><b>Open Compare</b></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm dialog -->
+  <div id="confirm-dialog" class="win95-window" hidden>
+    <div class="win95-titlebar">
+      <span class="win95-title">Confirm</span>
+      <div class="win95-titlebar-buttons">
+        <button class="win95-tb-btn" data-act="close" title="Close">✕</button>
+      </div>
+    </div>
+    <div class="win95-body" style="padding:14px; font-size:12px; display:flex; flex-direction:column; gap:12px;">
+      <div id="confirm-msg">Are you sure?</div>
+      <div style="display:flex; gap:6px; justify-content:flex-end;">
+        <button id="confirm-no">Cancel</button>
+        <button id="confirm-yes"><b>OK</b></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Icon properties dialog -->
+  <div id="icon-props" class="win95-window" hidden>
+    <div class="win95-titlebar">
+      <span class="win95-title">Icon Properties</span>
+      <div class="win95-titlebar-buttons">
+        <button class="win95-tb-btn" data-act="close" title="Close">✕</button>
+      </div>
+    </div>
+    <div class="win95-body settings-body">
+      <fieldset>
+        <legend>Name</legend>
+        <label>Label
+          <input type="text" id="icon-name" value="New Icon" />
+        </label>
+      </fieldset>
+      <fieldset>
+        <legend>Type</legend>
+        <label class="radio-row"><input type="radio" name="icon-type" value="url" checked /> Web URL</label>
+        <label class="radio-row"><input type="radio" name="icon-type" value="widget" /> TradingView Widget</label>
+      </fieldset>
+      <fieldset id="fs-url">
+        <legend>Target URL</legend>
+        <label>Opens in embedded browser
+          <input type="text" id="icon-url" placeholder="https://example.com" />
+        </label>
+      </fieldset>
+      <fieldset id="fs-widget" hidden>
+        <legend>TradingView Widget</legend>
+        <label>Widget
+          <select id="icon-widget">
+            <optgroup label="Charts">
+              <option value="advanced-chart">Advanced Chart</option>
+              <option value="mini-symbol-overview">Mini Chart</option>
+              <option value="symbol-overview">Symbol Overview</option>
+            </optgroup>
+            <optgroup label="Symbol Details">
+              <option value="symbol-info">Symbol Info</option>
+              <option value="technical-analysis">Technical Analysis</option>
+              <option value="financials">Fundamental Data</option>
+              <option value="symbol-profile">Company Profile</option>
+            </optgroup>
+            <optgroup label="Tickers">
+              <option value="single-quote">Single Ticker</option>
+              <option value="ticker">Ticker</option>
+              <option value="ticker-tape">Ticker Tape</option>
+            </optgroup>
+            <optgroup label="Watchlists">
+              <option value="market-overview">Market Overview</option>
+              <option value="market-quotes">Stock Market</option>
+              <option value="market-data">Market Data</option>
+            </optgroup>
+            <optgroup label="Heatmaps">
+              <option value="stock-heatmap">Stock Heatmap</option>
+              <option value="crypto-coins-heatmap">Crypto Heatmap</option>
+              <option value="etf-heatmap">ETF Heatmap</option>
+              <option value="forex-cross-rates">Forex Cross Rates</option>
+              <option value="forex-heat-map">Forex Heatmap</option>
+            </optgroup>
+            <optgroup label="Screeners">
+              <option value="screener">Screener</option>
+              <option value="crypto-mkt-screener">Crypto Market</option>
+            </optgroup>
+            <optgroup label="News &amp; Calendars">
+              <option value="timeline">Top Stories</option>
+              <option value="events">Economic Calendar</option>
+            </optgroup>
+            <optgroup label="Tools">
+              <option value="notepad">Notepad</option>
+            </optgroup>
+          </select>
+        </label>
+        <label>Symbol (optional, e.g. BITSTAMP:BTCUSD)
+          <input type="text" id="icon-widget-symbol" placeholder="BITSTAMP:BTCUSD" />
+        </label>
+      </fieldset>
+      <fieldset>
+        <legend>Icon Image</legend>
+        <div class="icon-preset-row">
+          <button class="preset-btn" data-preset="folder" title="Folder">📁</button>
+          <button class="preset-btn" data-preset="document" title="Document">📄</button>
+          <button class="preset-btn" data-preset="globe" title="Web">🌐</button>
+          <button class="preset-btn" data-preset="download" title="Downloads">⬇</button>
+          <button class="preset-btn" data-preset="computer" title="My Computer">🖥</button>
+          <button class="preset-btn" data-preset="disk" title="Disk">💾</button>
+          <button class="preset-btn" data-preset="heart" title="Favorite">❤</button>
+          <button class="preset-btn" data-preset="star" title="Star">⭐</button>
+        </div>
+        <label>Or upload custom (PNG/JPG/SVG)
+          <input type="file" id="icon-upload" accept="image/*" />
+        </label>
+        <div class="icon-preview-row">
+          <span>Preview:</span>
+          <span id="icon-preview" class="icon-preview">📁</span>
+        </div>
+      </fieldset>
+      <div class="settings-actions">
+        <button class="win95-btn" id="icon-cancel">Cancel</button>
+        <button class="win95-btn" id="icon-save">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings panel (also a Win95 window) -->
+  <div id="settings-window" class="win95-window" hidden>
+    <div class="win95-titlebar">
+      <span class="win95-title">Display Properties</span>
+      <div class="win95-titlebar-buttons">
+        <button class="win95-tb-btn" data-act="close" title="Close">✕</button>
+      </div>
+    </div>
+    <div class="win95-body settings-body">
+      <fieldset>
+        <legend>Background</legend>
+        <label>Background color
+          <input type="color" id="opt-bg" value="#000000" />
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Grid</legend>
+        <div class="num-row">
+          <span class="num-label">Grid spacing (px)</span>
+          <input type="range" id="opt-grid-size" min="4" max="200" step="0.5" value="40" />
+          <input type="number" id="num-grid-size" min="4" max="200" step="0.5" value="40" />
+        </div>
+        <label>Line color
+          <input type="color" id="opt-line" value="#2a2a2a" />
+        </label>
+        <div class="num-row">
+          <span class="num-label">Line thickness (px)</span>
+          <input type="range" id="opt-line-w" min="0" max="6" step="0.1" value="1" />
+          <input type="number" id="num-line-w" min="0" max="6" step="0.1" value="1" />
+        </div>
+        <label>Dot color
+          <input type="color" id="opt-dot" value="#7a7a7a" />
+        </label>
+        <div class="num-row">
+          <span class="num-label">Dot size (px)</span>
+          <input type="range" id="opt-dot-size" min="0" max="12" step="0.1" value="1" />
+          <input type="number" id="num-dot-size" min="0" max="12" step="0.1" value="1" />
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Window Chrome</legend>
+        <label>Title bar color
+          <input type="color" id="opt-tb" value="#000080" />
+        </label>
+        <label>Title bar text
+          <input type="color" id="opt-tb-text" value="#ffffff" />
+        </label>
+        <label>Window face
+          <input type="color" id="opt-face" value="#c0c0c0" />
+        </label>
+        <label>Highlight (top/left)
+          <input type="color" id="opt-hi" value="#ffffff" />
+        </label>
+        <label>Shadow (bottom/right)
+          <input type="color" id="opt-sh" value="#808080" />
+        </label>
+        <label>Body text
+          <input type="color" id="opt-text" value="#000000" />
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Default New Window</legend>
+        <div class="num-row">
+          <span class="num-label">Width (grid cells)</span>
+          <input type="range" id="opt-w" min="1" max="20" step="0.5" value="4" />
+          <input type="number" id="num-w" min="1" max="20" step="0.5" value="4" />
+        </div>
+        <div class="num-row">
+          <span class="num-label">Height (grid cells)</span>
+          <input type="range" id="opt-h" min="1" max="20" step="0.5" value="3" />
+          <input type="number" id="num-h" min="1" max="20" step="0.5" value="3" />
+        </div>
+        <label>Window title
+          <input type="text" id="opt-title" value="Menu" />
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Startup Layout</legend>
+        <label style="display:flex; align-items:center; gap:6px;">
+          <input type="checkbox" id="opt-default-tpl" />
+          <span>Restore my layout on startup</span>
+        </label>
+        <div style="font-size:11px; opacity:0.7; margin:4px 0 6px 0;" id="default-tpl-status">No saved layout. Click Save Current Layout to capture.</div>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <button class="win95-btn" id="btn-save-default-tpl" type="button">Save Current Layout</button>
+          <button class="win95-btn" id="btn-clear-default-tpl" type="button">Clear Saved Layout</button>
+        </div>
+        <div style="font-size:11px; opacity:0.6; margin-top:6px;">Stored in browser localStorage. Only persists on this device.</div>
+      </fieldset>
+
+      <div class="settings-actions">
+        <button class="win95-btn" id="btn-reset">Reset to Defaults</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
